@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Christmas Magic - Mariah Carey Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+    
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #080204; font-family: 'Montserrat', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        .video-preview-container {
+            position: absolute; bottom: 20px; right: 20px;
+            width: 180px; height: 135px; z-index: 20;
+            border-radius: 12px; overflow: hidden;
+            border: 2px solid rgba(255, 215, 0, 0.4);
+            background: rgba(0,0,0,0.8);
+            box-shadow: 0 0 25px rgba(255, 50, 100, 0.2);
+        }
+        #input-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        .ui-layer { position: absolute; z-index: 50; pointer-events: none; width: 100%; height: 100%; top: 0; left: 0; }
+        .pointer-events-auto { pointer-events: auto; }
+
+        .glass-panel {
+            background: rgba(20, 10, 15, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 100, 150, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        .neon-title {
+            color: #fce7f3; 
+            text-shadow: 0 0 10px #db2777, 0 0 20px #db2777; 
+            font-family: 'Cinzel', serif; letter-spacing: 3px;
+        }
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: #fbbf24;
+            border-radius: 50%; width: 50px; height: 50px; animation: spin 0.8s linear infinite;
+        }
+        .music-disc { animation: spin 4s linear infinite; }
+        .paused .music-disc { animation-play-state: paused; }
+        .scrolling-text-container { width: 100%; overflow: hidden; white-space: nowrap; }
+        .scrolling-text { display: inline-block; animation: scroll-text 8s linear infinite; padding-left: 100%; }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes scroll-text { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body class="text-pink-50">
+
+    <div id="canvas-container"></div>
+    
+    <div class="video-preview-container pointer-events-auto">
+        <video id="input-video"></video>
+        <div id="gesture-debug" class="absolute bottom-0 left-0 w-full bg-black/60 text-[10px] text-center py-1 text-yellow-300">Initializing...</div>
+    </div>
+
+    <div id="loading" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020001] transition-opacity duration-500">
+        <div class="loader mb-6"></div>
+        <div class="text-yellow-200 tracking-[0.2em] text-sm uppercase">Starting Engine</div>
+    </div>
+
+    <div class="ui-layer flex flex-col justify-between p-8">
+        <div class="flex justify-between items-start w-full">
+            <div>
+                <h1 class="text-5xl neon-title font-bold">CHRISTMAS MAGIC</h1>
+                <p class="text-xs text-pink-200/70 mt-2 tracking-widest uppercase">Gesture Interactive System</p>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="pointer-events-auto glass-panel rounded-full p-2 pr-4 flex items-center gap-3 hover:bg-white/10 transition-colors group z-50">
+                    <label for="music-input" class="relative cursor-pointer w-10 h-10 rounded-full bg-black/40 flex items-center justify-center overflow-hidden border border-white/20 hover:border-pink-500 transition-colors">
+                        <div id="music-icon" class="music-disc w-full h-full flex items-center justify-center opacity-80 paused">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-pink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                            </svg>
+                        </div>
+                        <div class="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                        </div>
+                        <input type="file" id="music-input" accept="audio/*, .mgg, .qmc, .ncm, .mflac" class="hidden">
+                    </label>
+
+                    <div class="flex flex-col w-32 overflow-hidden">
+                        <div class="scrolling-text-container">
+                            <span id="song-title" class="text-[10px] font-bold text-pink-100 whitespace-nowrap">All I Want For Christmas Is You</span>
+                        </div>
+                        <span id="song-artist" class="text-[8px] text-pink-400/80">Mariah Carey</span>
+                    </div>
+
+                    <button id="btn-play-music" class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-600 to-purple-700 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform shadow-lg shadow-pink-500/30">
+                        <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white ml-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg>
+                        <svg id="icon-pause" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white hidden" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                    </button>
+                    <audio id="bg-music" loop>
+                        <source src="All I Want for Christmas Is You-Mariah Carey.mp3" type="audio/mp3">
+                    </audio>
+                </div>
+
+                <button id="btn-settings" class="pointer-events-auto glass-panel p-4 rounded-full hover:bg-white/10 transition-all active:scale-90 cursor-pointer group z-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-pink-200 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="glass-panel px-8 py-4 rounded-2xl self-center mb-8 transition-all duration-300 flex flex-col items-center">
+            <div id="status-text" class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-200 to-yellow-100 tracking-wide uppercase">
+                Initializing
+            </div>
+            <div class="w-full h-[1px] bg-white/10 my-2"></div>
+            <div class="flex gap-4 text-[10px] text-pink-200/60 uppercase tracking-wider">
+                <span>🖐 Disperse</span> <span>✊ Tree</span> <span>✌️ Merry Xmas</span> <span>👌 Photo</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="glass-panel w-[400px] p-8 rounded-2xl transform scale-95 transition-transform duration-300 border border-white/10 pointer-events-auto">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-bold text-white tracking-tight">Setup</h2>
+                <button id="btn-close" class="text-white/50 hover:text-white text-2xl cursor-pointer">&times;</button>
+            </div>
+            <div class="mb-8">
+                <label class="block text-xs font-bold text-pink-400 mb-3 uppercase tracking-widest">Upload Photo (Pinch 👌)</label>
+                <input type="file" id="image-upload" accept="image/*" class="text-sm text-pink-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"/>
+            </div>
+            <div class="mb-8">
+                <label class="block text-xs font-bold text-pink-400 mb-3 uppercase tracking-widest">Custom Text (Heart 🫶)</label>
+                <input type="text" id="custom-text-input" placeholder="ENGLISH ONLY" maxlength="12" class="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-pink-500">
+            </div>
+            <button id="btn-save" class="w-full bg-gradient-to-r from-pink-700 to-purple-800 text-white font-bold py-3 px-4 rounded-xl cursor-pointer hover:from-pink-600 hover:to-purple-700 transition-all">CONFIRM</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+        // --- Performance Config (Balanced) ---
+        const config = {
+            // OPTIMIZATION: Reduced from 42000 to 32000 to improve lag on standard devices
+            particleCount: 32000, 
+            particleSize: 0.22,   
+            bgColor: new THREE.Color('#080204'),
+            bloomStrength: 1.5,
+            bloomRadius: 0.5,
+            bloomThreshold: 0.1,
+        };
+
+        const STATE = { IDLE: 0, TREE: 1, TEXT_MERRY: 2, IMAGE: 3, TEXT_CUSTOM: 4 };
+        const STATE_LABELS = ['Disperse', 'Christmas Tree', 'Merry Xmas', 'Photo Mode', 'Custom Text'];
+        let currentState = STATE.IDLE;
+        
+        let scene, camera, renderer, composer, particles, font;
+        let targetPositions = new Float32Array(config.particleCount * 3);
+        let targetColors = new Float32Array(config.particleCount * 3);
+        
+        let merryTextData = [];
+        let customTextData = [];
+        let customImageData = null;
+        let hasCustomImage = false;
+        let hasCustomText = false;
+        let fontLoaded = false;
+        
+        let isHandDetected = false;
+        let handRotation = { x: 0, y: 0 };
+        let mouseRotation = { x: 0, y: 0 };
+        let targetSceneRotation = { x: 0, y: 0 };
+
+        const statusText = document.getElementById('status-text');
+        const debugText = document.getElementById('gesture-debug');
+        const videoElement = document.getElementById('input-video');
+
+        if (window.location.protocol === 'file:') alert("请使用 VS Code 'Live Server' 运行！");
+
+        async function init() {
+            scene = new THREE.Scene();
+            scene.background = config.bgColor;
+            scene.fog = new THREE.FogExp2(config.bgColor, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.z = 25;
+
+            // Render Precision Optimization
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const renderScene = new RenderPass(scene, camera);
+            // Bloom Optimization
+            const bloomPass = new UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
+                config.bloomStrength, config.bloomRadius, config.bloomThreshold
+            );
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            createParticles();
+            requestAnimationFrame(animate);
+            loadFontResources();
+            setupMediaPipe();
+            setupMouse();
+            setupUI();
+            
+            setTimeout(() => {
+                const loader = document.getElementById('loading');
+                if (loader && !loader.classList.contains('hidden')) {
+                    gsap.to(loader, { opacity: 0, duration: 0.5, onComplete: () => loader.style.display = 'none' });
+                }
+            }, 3500);
+        }
+
+        function setupUI() {
+            const modal = document.getElementById('settings-modal');
+            const btnSettings = document.getElementById('btn-settings');
+            const btnClose = document.getElementById('btn-close');
+            const btnSave = document.getElementById('btn-save');
+
+            btnSettings.addEventListener('click', () => { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); });
+            const closeModal = () => { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); };
+            btnClose.addEventListener('click', closeModal);
+
+            btnSave.addEventListener('click', () => {
+                const val = document.getElementById('custom-text-input').value.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+                if(val) { customTextData = generateTextPoints(val, 4.0); hasCustomText = true; }
+                closeModal();
+            });
+
+            document.getElementById('image-upload').addEventListener('change', (e) => {
+                if(e.target.files[0]) processImage(e.target.files[0]);
+            });
+
+            // Music Player
+            const audio = document.getElementById('bg-music');
+            const btnPlayMusic = document.getElementById('btn-play-music');
+            const iconPlay = document.getElementById('icon-play');
+            const iconPause = document.getElementById('icon-pause');
+            const musicInput = document.getElementById('music-input');
+            const songTitle = document.getElementById('song-title');
+            const songArtist = document.getElementById('song-artist');
+            const musicIcon = document.getElementById('music-icon');
+            let isPlaying = false;
+
+            btnPlayMusic.addEventListener('click', () => {
+                if (isPlaying) {
+                    audio.pause();
+                    iconPlay.classList.remove('hidden'); iconPause.classList.add('hidden');
+                    musicIcon.classList.add('paused');
+                } else {
+                    audio.play().catch(e => {
+                        console.warn("Autoplay blocked or file not found:", e);
+                        alert("播放失败：请确保 'All I Want for Christmas Is You-Mariah Carey.mp3' 文件已放在同一目录下。");
+                    });
+                    iconPlay.classList.add('hidden'); iconPause.classList.remove('hidden');
+                    musicIcon.classList.remove('paused');
+                }
+                isPlaying = !isPlaying;
+            });
+
+            musicInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // Check for encryption formats
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (['mgg', 'qmc', 'qmc0', 'qmc3', 'ncm', 'mflac'].includes(ext)) {
+                        alert("⚠️ 无法播放加密音乐 \n\n您选择的文件 (" + ext + ") 是加密格式。\n由于版权限制，浏览器无法直接解码。\n\n✅ 请上传标准的 MP3 格式文件。");
+                        return; 
+                    }
+
+                    const objectUrl = URL.createObjectURL(file);
+                    audio.src = objectUrl;
+                    let name = file.name.replace(/\.[^/.]+$/, ""); 
+                    if(name.length > 20) name = name.substring(0, 18) + "...";
+                    songTitle.innerText = name;
+                    songArtist.innerText = "Custom Upload";
+                    audio.play();
+                    isPlaying = true;
+                    iconPlay.classList.add('hidden'); iconPause.classList.remove('hidden');
+                    musicIcon.classList.remove('paused');
+                }
+            });
+        }
+
+        function loadFontResources() {
+            const loader = new FontLoader();
+            loader.load('https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json', 
+                (loadedFont) => {
+                    font = loadedFont;
+                    fontLoaded = true;
+                    merryTextData = generateTextPoints('MERRY\nCHRISTMAS', 3.8);
+                    gsap.to(document.getElementById('loading'), { opacity: 0, duration: 0.5, onComplete: () => document.getElementById('loading').style.display = 'none' });
+                },
+                undefined,
+                (err) => { console.warn("Font error", err); setTimeout(() => document.getElementById('loading').style.display = 'none', 1000); }
+            );
+        }
+
+        function generateTextPoints(text, size) {
+            if(!font) return [];
+            const geo = new TextGeometry(text, {
+                font: font, size: size, height: 0.8, curveSegments: 6, 
+                bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.08, bevelSegments: 3
+            });
+            geo.center();
+            geo.computeVertexNormals();
+
+            const posAttribute = geo.attributes.position;
+            const points = [];
+            const triangleCount = posAttribute.count / 3;
+            const areas = [];
+            let totalArea = 0;
+            const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+            const _ba = new THREE.Vector3(), _ca = new THREE.Vector3();
+
+            for (let i = 0; i < triangleCount; i++) {
+                const i3 = i * 3;
+                _a.fromBufferAttribute(posAttribute, i3);
+                _b.fromBufferAttribute(posAttribute, i3 + 1);
+                _c.fromBufferAttribute(posAttribute, i3 + 2);
+                _ba.subVectors(_b, _a); _ca.subVectors(_c, _a);
+                const area = _ba.cross(_ca).length() * 0.5;
+                totalArea += area;
+                areas.push(totalArea);
+            }
+
+            for (let i = 0; i < config.particleCount; i++) {
+                const r = Math.random() * totalArea;
+                let left = 0, right = triangleCount - 1, triIndex = 0;
+                while (left <= right) {
+                    const mid = Math.floor((left + right) / 2);
+                    if (r < areas[mid]) { triIndex = mid; right = mid - 1; } 
+                    else { left = mid + 1; }
+                }
+
+                const i3 = triIndex * 3;
+                _a.fromBufferAttribute(posAttribute, i3);
+                _b.fromBufferAttribute(posAttribute, i3 + 1);
+                _c.fromBufferAttribute(posAttribute, i3 + 2);
+
+                let r1 = Math.random(), r2 = Math.random();
+                if (r1 + r2 > 1) { r1 = 1 - r1; r2 = 1 - r2; }
+                const r3 = 1 - r1 - r2;
+
+                const px = r1 * _a.x + r2 * _b.x + r3 * _c.x;
+                const py = r1 * _a.y + r2 * _b.y + r3 * _c.y;
+                const pz = r1 * _a.z + r2 * _b.z + r3 * _c.z;
+                points.push(new THREE.Vector3(px, py, pz));
+            }
+            return points;
+        }
+
+        function createParticles() {
+            const geometry = new THREE.BufferGeometry();
+            const pos = new Float32Array(config.particleCount * 3);
+            const cols = new Float32Array(config.particleCount * 3);
+            const color = new THREE.Color();
+
+            for (let i = 0; i < config.particleCount; i++) {
+                const r = 30 * Math.cbrt(Math.random());
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                pos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                pos[i*3+2] = r * Math.cos(phi);
+                color.setHSL(0.95, 0.6, 0.6);
+                cols[i*3] = color.r; cols[i*3+1] = color.g; cols[i*3+2] = color.b;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+            const mat = new THREE.PointsMaterial({
+                size: config.particleSize, vertexColors: true, blending: THREE.AdditiveBlending,
+                depthTest: false, transparent: true, opacity: 0.9, map: createTexture()
+            });
+            particles = new THREE.Points(geometry, mat);
+            scene.add(particles);
+            updateTargets(STATE.IDLE);
+        }
+
+        function createTexture() {
+            const cvs = document.createElement('canvas'); cvs.width = 32; cvs.height = 32;
+            const ctx = cvs.getContext('2d');
+            const grd = ctx.createRadialGradient(16,16,0,16,16,16);
+            grd.addColorStop(0, 'rgba(255,255,255,1)');
+            grd.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+            grd.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grd; ctx.fillRect(0,0,32,32);
+            return new THREE.CanvasTexture(cvs);
+        }
+
+        function updateTargets(mode) {
+            const count = config.particleCount;
+            const color = new THREE.Color();
+
+            if (mode === STATE.IDLE) {
+                for (let i = 0; i < count; i++) {
+                    const r = 22 * Math.cbrt(Math.random());
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    targetPositions[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                    targetPositions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                    targetPositions[i*3+2] = r * Math.cos(phi);
+                    color.setHSL(0.9 + Math.random()*0.1, 0.6, 0.5);
+                    targetColors[i*3] = color.r; targetColors[i*3+1] = color.g; targetColors[i*3+2] = color.b;
+                }
+            } 
+            else if (mode === STATE.TREE) {
+                for (let i = 0; i < count; i++) {
+                    const h = (Math.random() * 26) - 13; 
+                    const t = (h + 13) / 26; 
+                    const isDeco = (i % 15 === 0); 
+                    if (isDeco) {
+                        const angle = t * Math.PI * 22; 
+                        const r = (1-t) * 10.5 + 0.5;
+                        targetPositions[i*3] = Math.cos(angle) * r;
+                        targetPositions[i*3+1] = h;
+                        targetPositions[i*3+2] = Math.sin(angle) * r;
+                        color.setHSL(0.12, 0.85, 0.6 + Math.random() * 0.3); 
+                    } else {
+                        const maxR = (1 - t) * 10;
+                        const r = maxR * Math.sqrt(Math.random());
+                        const angle = Math.random() * Math.PI * 2;
+                        targetPositions[i*3] = Math.cos(angle) * r;
+                        targetPositions[i*3+1] = h;
+                        targetPositions[i*3+2] = Math.sin(angle) * r;
+                        if(Math.random() > 0.92) color.setHSL(0.6, 0.7, 0.8); 
+                        else color.setHSL(0.35 + Math.random()*0.05, 0.7, 0.15 + t*0.2); 
+                    }
+                    targetColors[i*3] = color.r; targetColors[i*3+1] = color.g; targetColors[i*3+2] = color.b;
+                }
+            }
+            else if (mode === STATE.TEXT_MERRY) {
+                if (merryTextData.length > 0) fillFromPoints(merryTextData, 1.1);
+                else updateTargets(STATE.IDLE); 
+            }
+            else if (mode === STATE.TEXT_CUSTOM) {
+                if (customTextData.length > 0) fillFromPoints(customTextData, 1.1);
+                else updateTargets(STATE.IDLE);
+            }
+            else if (mode === STATE.IMAGE && customImageData) {
+                const pts = customImageData.positions;
+                const cls = customImageData.colors;
+                const len = pts.length / 3;
+                for(let i=0; i<count; i++) {
+                    const idx = i % len;
+                    targetPositions[i*3] = pts[idx*3] * 0.14; 
+                    targetPositions[i*3+1] = pts[idx*3+1] * 0.14;
+                    targetPositions[i*3+2] = 0; 
+                    targetColors[i*3] = cls[idx*3];
+                    targetColors[i*3+1] = cls[idx*3+1];
+                    targetColors[i*3+2] = cls[idx*3+2];
+                }
+            }
+        }
+
+        function fillFromPoints(points, scale) {
+            const count = config.particleCount;
+            const len = points.length;
+            const color = new THREE.Color();
+            for(let i=0; i<count; i++) {
+                const idx = i % len;
+                targetPositions[i*3] = points[idx].x * scale + (Math.random()-0.5)*0.02;
+                targetPositions[i*3+1] = points[idx].y * scale + (Math.random()-0.5)*0.02;
+                targetPositions[i*3+2] = points[idx].z * scale + (Math.random()-0.5)*0.02;
+                const hue = 0.9 + (points[idx].x * 0.02) % 0.1; 
+                color.setHSL(hue, 0.85, 0.65);
+                targetColors[i*3] = color.r; targetColors[i*3+1] = color.g; targetColors[i*3+2] = color.b;
+            }
+        }
+
+        function setupMediaPipe() {
+            if (window.location.protocol === 'file:') return;
+            const hands = new Hands({locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+            hands.setOptions({maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7});
+            hands.onResults(onResults);
+            
+            const cam = new Camera(videoElement, {
+                onFrame: async () => await hands.send({image: videoElement}),
+                width: 320, height: 240
+            });
+            cam.start();
+        }
+
+        function onResults(res) {
+            let detected = null;
+            let debugMsg = "No Hand";
+            isHandDetected = false;
+
+            if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+                isHandDetected = true;
+                const lm = res.multiHandLandmarks[0];
+                handRotation.y = (lm[0].x - 0.5) * 3.5; 
+                handRotation.x = (lm[0].y - 0.5) * 3.5;
+
+                const openFingers = countOpenFingers(lm);
+                const isPinch = dist(lm[4], lm[8]) < 0.05;
+                
+                let isHeart = false;
+                if(res.multiHandLandmarks.length > 1) {
+                    const lm2 = res.multiHandLandmarks[1];
+                    if(dist(lm[8], lm2[8]) < 0.1 && dist(lm[4], lm2[4]) < 0.15) isHeart = true;
+                }
+
+                if (isHeart && hasCustomText) { detected = STATE.TEXT_CUSTOM; debugMsg = "🫶 Heart"; }
+                else if (isPinch && hasCustomImage) { detected = STATE.IMAGE; debugMsg = "👌 Pinch (Photo)"; }
+                else if (openFingers === 0) { detected = STATE.TREE; debugMsg = "✊ Fist (Tree)"; }
+                else if (openFingers === 2) { detected = STATE.TEXT_MERRY; debugMsg = "✌️ Victory"; }
+                else if (openFingers >= 4) { detected = STATE.IDLE; debugMsg = "🖐 Open (Disperse)"; }
+            }
+            debugText.innerText = `Detected: ${debugMsg}`;
+            if (detected !== null && detected !== currentState) {
+                currentState = detected;
+                statusText.innerText = STATE_LABELS[currentState];
+                updateTargets(currentState);
+            }
+        }
+
+        function countOpenFingers(lm) {
+            const tips = [8, 12, 16, 20]; 
+            const pips = [6, 10, 14, 18]; 
+            const wrist = lm[0];
+            let count = 0;
+            for(let i=0; i<4; i++) {
+                const distTip = dist(lm[tips[i]], wrist);
+                const distPip = dist(lm[pips[i]], wrist);
+                if (distTip > distPip * 1.1) count++;
+            }
+            return count;
+        }
+
+        function dist(a,b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+
+        function setupMouse() {
+            document.addEventListener('mousemove', e => {
+                if(!isHandDetected) {
+                    mouseRotation.x = (e.clientY / window.innerHeight - 0.5) * 2;
+                    mouseRotation.y = (e.clientX / window.innerWidth - 0.5) * 2;
+                }
+            });
+            document.addEventListener('click', (e) => {
+                if(isHandDetected || e.target.closest('button') || e.target.closest('#settings-modal') || e.target.closest('.video-preview-container') || e.target.closest('label')) return;
+                let next = (currentState + 1) % 5;
+                if(next === STATE.IMAGE && !hasCustomImage) next++;
+                if(next === STATE.TEXT_CUSTOM && !hasCustomText) next++;
+                if(next > 4) next = 0;
+                currentState = next;
+                statusText.innerText = STATE_LABELS[currentState];
+                updateTargets(currentState);
+            });
+        }
+
+        function processImage(file) {
+            const r = new FileReader();
+            r.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const cvs = document.createElement('canvas');
+                    const ctx = cvs.getContext('2d');
+                    const max = 250; 
+                    let w = img.width, h = img.height;
+                    if (w > h && w > max) { h *= max/w; w = max; }
+                    else if (h > max) { w *= max/h; h = max; }
+                    cvs.width = w; cvs.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const data = ctx.getImageData(0, 0, w, h).data;
+                    const pos = [], col = [];
+                    for(let y=0; y<h; y++) {
+                        for(let x=0; x<w; x++) {
+                            const i = (y*w + x)*4;
+                            if(data[i+3] > 128) {
+                                pos.push(x - w/2, -(y - h/2), 0);
+                                let r = data[i], g = data[i+1], b = data[i+2];
+                                r = Math.min(255, r * 1.4); g = Math.min(255, g * 1.4); b = Math.min(255, b * 1.4);
+                                col.push(r/255, g/255, b/255);
+                            }
+                        }
+                    }
+                    customImageData = { positions: pos, colors: col };
+                    hasCustomImage = true;
+                    alert("Image Loaded! Use 'Pinch' gesture or click to view.");
+                };
+                img.src = e.target.result;
+            };
+            r.readAsDataURL(file);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (particles) {
+                const pos = particles.geometry.attributes.position.array;
+                const col = particles.geometry.attributes.color.array;
+                const lerpFactor = 0.08;
+                for (let i = 0; i < config.particleCount * 3; i++) {
+                    pos[i] += (targetPositions[i] - pos[i]) * lerpFactor;
+                    col[i] += (targetColors[i] - col[i]) * lerpFactor;
+                }
+                particles.geometry.attributes.position.needsUpdate = true;
+                particles.geometry.attributes.color.needsUpdate = true;
+
+                if (currentState === STATE.IMAGE) {
+                    targetSceneRotation.x = Math.sin(Date.now() * 0.001) * 0.05; 
+                    targetSceneRotation.y = Math.sin(Date.now() * 0.0015) * 0.05;
+                } else {
+                    const rx = isHandDetected ? handRotation.x : mouseRotation.x;
+                    const ry = isHandDetected ? -handRotation.y : mouseRotation.y;
+                    targetSceneRotation.x = rx * 0.5;
+                    targetSceneRotation.y = ry * 0.5;
+                }
+                particles.rotation.x += (targetSceneRotation.x - particles.rotation.x) * 0.05;
+                particles.rotation.y += (targetSceneRotation.y - particles.rotation.y) * 0.05;
+                if(currentState === STATE.TREE) particles.rotation.y += 0.003;
+            }
+            composer.render();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
